@@ -7,8 +7,10 @@ param(
     [string]$RepositoryName = "openai-skill-for-academic",
     [string]$Branch = "main",
     [string]$ValidatorPath = "E:\openai-skill\.system\skill-creator\scripts\quick_validate.py",
+    [string]$GhPath = "C:\Program Files\GitHub CLI\gh.exe",
     [string]$RemoteUrl,
     [switch]$NoPush,
+    [switch]$NoApiFallback,
     [switch]$SkipValidation
 )
 
@@ -61,6 +63,32 @@ function Get-OriginRemote {
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
+}
+
+function Invoke-ApiSync {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $true)]
+        [string]$BranchName
+    )
+
+    if ($NoApiFallback) {
+        return $false
+    }
+
+    $syncScript = Join-Path $RepoPath "scripts\sync_to_github_api.ps1"
+    if (-not (Test-Path -LiteralPath $syncScript)) {
+        Write-Warning "API sync script was not found: $syncScript"
+        return $false
+    }
+
+    powershell -ExecutionPolicy Bypass -File $syncScript -Branch $BranchName -GhPath $GhPath -Message $Message
+    if ($LASTEXITCODE -ne 0) {
+        throw "GitHub API sync failed."
+    }
+    return $true
 }
 
 $resolvedSkill = (Resolve-Path -LiteralPath $SkillPath).Path
@@ -161,7 +189,8 @@ if (-not $status) {
     exit 0
 }
 
-Invoke-Git -Arguments @("commit", "-m", "Update skill: $skillName")
+$commitMessage = "Update skill: $skillName"
+Invoke-Git -Arguments @("commit", "-m", $commitMessage)
 
 if ($NoPush) {
     Write-Host "Committed locally only because -NoPush was supplied."
@@ -183,5 +212,27 @@ if (-not $currentBranch) {
     $currentBranch = $Branch
 }
 
-Invoke-Git -Arguments @("push", "-u", "origin", $currentBranch)
-Write-Host "Published skill '$skillName' to $origin on branch $currentBranch."
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    $pushOutput = & git -C $RepoPath push -u origin $currentBranch 2>&1
+    $pushExitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+
+if ($pushExitCode -eq 0) {
+    $pushOutput | ForEach-Object { Write-Host $_ }
+    Write-Host "Published skill '$skillName' to $origin on branch $currentBranch."
+    exit 0
+}
+
+Write-Warning "git push failed. Trying GitHub API sync fallback."
+$pushOutput | ForEach-Object { Write-Warning $_ }
+if (Invoke-ApiSync -Message $commitMessage -BranchName $currentBranch) {
+    Write-Host "Published skill '$skillName' through GitHub API fallback."
+    exit 0
+}
+
+throw "Skill was committed locally, but upload did not complete."

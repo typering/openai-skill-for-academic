@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Owner = "typering",
-    [string]$RepositoryName = "openai-skill-for-academic",
+    [string]$Owner,
+    [string]$RepositoryName,
     [string]$Branch = "main",
     [string]$GhPath = "C:\Program Files\GitHub CLI\gh.exe",
     [string]$Message = "Sync skills and prompts via GitHub API"
@@ -18,6 +18,26 @@ if (-not (Test-Path -LiteralPath $GhPath)) {
 }
 
 $RepoPath = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+
+if (-not $Owner -or -not $RepositoryName) {
+    $origin = (& git -C $RepoPath remote get-url origin 2>$null)
+    if ($origin -match "github\.com[:/](?<owner>[^/]+)/(?<repo>[^/]+?)(?:\.git)?$") {
+        if (-not $Owner) {
+            $Owner = $Matches.owner
+        }
+        if (-not $RepositoryName) {
+            $RepositoryName = $Matches.repo
+        }
+    }
+}
+
+if (-not $Owner) {
+    $Owner = "typering"
+}
+if (-not $RepositoryName) {
+    $RepositoryName = "openai-skill-for-academic"
+}
+
 $ApiRoot = "repos/$Owner/$RepositoryName"
 
 function Invoke-GhJson {
