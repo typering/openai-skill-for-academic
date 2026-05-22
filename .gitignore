@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.pytest_cache/
+raman_skill_test_output/

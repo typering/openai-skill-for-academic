@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raman Spectrum Plotting"
+  short_description: "Auto-plot Raman spectra from data with peak and C-D/C-G annotations."
+  default_prompt: "Use this skill automatically when a user asks to draw or process Raman spectra from data files. Follow the standing Raman plotting prompt, set the requested x-axis range, save PNG/SVG outputs, and generate peak-position tables."

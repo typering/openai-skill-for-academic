@@ -1,0 +1,7 @@
+interface:
+  display_name: "Scientific Figure Composer"
+  short_description: "Compose publication-style scientific figure panels with captions and analysis."
+  default_prompt: "Use $scientific-figure-composer automatically whenever I ask to 绘制组图, 生成组图, 制作组图, write figure captions, or save publication-style scientific figure panels, and update its saved preferences when I give reusable corrections."
+
+policy:
+  allow_implicit_invocation: true

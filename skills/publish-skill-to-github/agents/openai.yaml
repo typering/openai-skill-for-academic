@@ -1,0 +1,4 @@
+interface:
+  display_name: "Publish Skill to GitHub"
+  short_description: "Validate and publish Codex skills to openai-skill-for-academic."
+  default_prompt: "After creating or updating a skill, validate it, copy it into the openai-skill-for-academic repository, commit it, and push when a GitHub remote is configured."
