@@ -12,7 +12,7 @@ Use this skill as the finishing workflow for Codex skill creation and updates. I
 Default repository:
 
 ```text
-C:\Users\xiezhiyu\Documents\openai-skill-for-academic
+E:\self-openai-skills\openai-skill-for-academic
 ```
 
 Default layout:
@@ -48,7 +48,7 @@ If the current task is skill creation or skill improvement and the user has aske
 
 1. Identify the skill directory. It must contain `SKILL.md`.
 2. Validate the skill with `quick_validate.py` before publishing.
-3. Ensure the local repository exists at `C:\Users\xiezhiyu\Documents\openai-skill-for-academic`.
+3. Ensure the local repository exists at `E:\self-openai-skills\openai-skill-for-academic`.
 4. Copy the skill into `skills/<skill-name>` inside that repository.
 5. Validate the copied skill again from the repository location.
 6. Commit the change with a message like `Update skill: <skill-name>`.
@@ -77,7 +77,7 @@ Optional parameters:
 Use `scripts/publish_prompt.ps1` to publish a single prompt file:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "C:\Users\xiezhiyu\Documents\openai-skill-for-academic\scripts\publish_prompt.ps1" `
+powershell -ExecutionPolicy Bypass -File "E:\self-openai-skills\openai-skill-for-academic\scripts\publish_prompt.ps1" `
   -PromptPath "E:\path\to\prompt.md"
 ```
 

@@ -4,7 +4,7 @@ param(
     [string]$PromptPath,
 
     [string]$PromptName,
-    [string]$RepoPath = "$env:USERPROFILE\Documents\openai-skill-for-academic",
+    [string]$RepoPath = "E:\self-openai-skills\openai-skill-for-academic",
     [string]$Branch = "main",
     [string]$GhPath = "C:\Program Files\GitHub CLI\gh.exe",
     [switch]$NoPush,

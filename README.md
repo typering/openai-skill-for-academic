@@ -2,6 +2,12 @@
 
 Personal Codex skills for academic and research workflows.
 
+Local repository path:
+
+```text
+E:\self-openai-skills\openai-skill-for-academic
+```
+
 Skills are stored under:
 
 ```text

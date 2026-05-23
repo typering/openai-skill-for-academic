@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SkillPath,
 
-    [string]$RepoPath = "$env:USERPROFILE\Documents\openai-skill-for-academic",
+    [string]$RepoPath = "E:\self-openai-skills\openai-skill-for-academic",
     [string]$RepositoryName = "openai-skill-for-academic",
     [string]$Branch = "main",
     [string]$ValidatorPath = "E:\openai-skill\.system\skill-creator\scripts\quick_validate.py",
