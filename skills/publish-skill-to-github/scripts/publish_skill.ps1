@@ -172,6 +172,26 @@ Get-ChildItem -LiteralPath $resolvedSkill -Force | Where-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Recurse -Force
 }
 
+Get-ChildItem -LiteralPath $targetPath -Recurse -Force -Directory | Where-Object {
+    $_.Name -in @(".git", "__pycache__", ".pytest_cache", "node_modules")
+} | ForEach-Object {
+    $generatedPath = [System.IO.Path]::GetFullPath($_.FullName)
+    if (-not $generatedPath.StartsWith($targetFull.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove generated directory outside target: $generatedPath"
+    }
+    Remove-Item -LiteralPath $_.FullName -Recurse -Force
+}
+
+Get-ChildItem -LiteralPath $targetPath -Recurse -Force -File | Where-Object {
+    $_.Extension -in @(".pyc", ".pyo")
+} | ForEach-Object {
+    $generatedPath = [System.IO.Path]::GetFullPath($_.FullName)
+    if (-not $generatedPath.StartsWith($targetFull.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove generated file outside target: $generatedPath"
+    }
+    Remove-Item -LiteralPath $_.FullName -Force
+}
+
 Invoke-Validation -Path $targetPath
 
 if ($RemoteUrl) {
