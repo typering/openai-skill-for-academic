@@ -1,0 +1,6 @@
+interface:
+  display_name: "SEM Scale Bar Processing"
+  short_description: "Clean SEM images and redraw scale bars."
+  default_prompt: "Use $sem-scale-bar-processing to crop the SEM footer, redraw the Arial scale bar inside the image, and save cleaned outputs."
+policy:
+  allow_implicit_invocation: true
