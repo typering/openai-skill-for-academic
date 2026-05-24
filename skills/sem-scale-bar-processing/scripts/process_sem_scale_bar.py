@@ -298,10 +298,11 @@ def make_contact_sheet(image_paths: list[Path], out_path: Path) -> None:
     thumbs: list[Image.Image] = []
     thumb_w = 360
     thumb_h = 260
+    resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
     for path in image_paths:
         with Image.open(path) as image:
             thumb = image.convert("RGB")
-            thumb.thumbnail((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+            thumb.thumbnail((thumb_w, thumb_h), resample)
             canvas = Image.new("RGB", (thumb_w, thumb_h), (245, 245, 245))
             x = (thumb_w - thumb.size[0]) // 2
             y = (thumb_h - thumb.size[1]) // 2
