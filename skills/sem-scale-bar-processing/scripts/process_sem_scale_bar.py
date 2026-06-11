@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -29,7 +30,7 @@ def collect_images(paths: list[str], recursive: bool) -> list[Path]:
 
 
 def to_uint8_gray(image: Image.Image) -> np.ndarray:
-    if image.mode in {"L", "RGB", "RGBA"}:
+    if image.mode in {"L", "P", "RGB", "RGBA"}:
         gray = image.convert("L")
         return np.asarray(gray, dtype=np.uint8)
 
@@ -53,7 +54,7 @@ def to_uint8_gray(image: Image.Image) -> np.ndarray:
 def to_rgb(image: Image.Image) -> Image.Image:
     if image.mode == "RGB":
         return image.copy()
-    if image.mode == "RGBA":
+    if image.mode in {"P", "RGBA"}:
         return image.convert("RGB")
 
     gray = to_uint8_gray(image)
@@ -81,7 +82,31 @@ def longest_true_run(row: np.ndarray) -> tuple[int, int]:
     return best_start, best_len
 
 
-def detect_source_scale_bar(gray: np.ndarray) -> tuple[int | None, int | None, int | None]:
+def detect_colored_source_scale_bar(rgb: Image.Image) -> tuple[int | None, int | None, int | None]:
+    arr = np.asarray(rgb.convert("RGB"), dtype=np.uint8)
+    height, width, _ = arr.shape
+    r = arr[:, :, 0].astype(np.int16)
+    g = arr[:, :, 1].astype(np.int16)
+    b = arr[:, :, 2].astype(np.int16)
+
+    # ZEISS exports commonly draw the source scale bar in bright green.
+    colored = (g > 120) & (g - r > 45) & (g - b > 45)
+    start_y = int(height * 0.55)
+    end_y = int(height * 0.98)
+    min_run = max(18, int(width * 0.025))
+    max_run = int(width * 0.45)
+
+    best: tuple[int | None, int | None, int | None] = (None, None, None)
+    best_len = 0
+    for y in range(start_y, end_y):
+        x0, run_len = longest_true_run(colored[y])
+        if min_run <= run_len <= max_run and run_len > best_len:
+            best = (x0, y, run_len)
+            best_len = run_len
+    return best
+
+
+def detect_bright_source_scale_bar(gray: np.ndarray) -> tuple[int | None, int | None, int | None]:
     height, width = gray.shape
     start_y = int(height * 0.52)
     threshold = max(210, int(np.percentile(gray, 99.2) * 0.82))
@@ -97,6 +122,85 @@ def detect_source_scale_bar(gray: np.ndarray) -> tuple[int | None, int | None, i
             best = (x0, start_y + local_y, run_len)
             best_len = run_len
     return best
+
+
+def detect_source_scale_bar(
+    gray: np.ndarray,
+    rgb: Image.Image | None = None,
+) -> tuple[int | None, int | None, int | None]:
+    if rgb is not None:
+        colored = detect_colored_source_scale_bar(rgb)
+        if colored[2] is not None:
+            return colored
+    return detect_bright_source_scale_bar(gray)
+
+
+def normalize_tag_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        for encoding in ("utf-8", "utf-16le", "latin-1"):
+            try:
+                return value.decode(encoding, errors="ignore").replace("\x00", "")
+            except UnicodeDecodeError:
+                continue
+        return ""
+    return str(value).replace("\x00", "")
+
+
+def extract_pixel_size_m(image: Image.Image) -> float | None:
+    tag_source = getattr(image, "tag_v2", {})
+    for tag_id in (34118, 34119):
+        text = normalize_tag_text(tag_source.get(tag_id))
+        if not text:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", stripped):
+                continue
+            try:
+                value = float(stripped)
+            except ValueError:
+                continue
+            if 1e-12 <= value <= 1e-4:
+                return value
+    return None
+
+
+def format_scale_label(value: float, unit: str) -> str:
+    rounded = round(value)
+    if abs(value - rounded) < 1e-6:
+        text = str(int(rounded))
+    else:
+        text = f"{value:.3g}"
+    return f"{text} {unit}"
+
+
+def infer_scale_label(bar_length_px: int | None, pixel_size_m: float | None) -> str | None:
+    if bar_length_px is None or pixel_size_m is None:
+        return None
+
+    length_um = float(bar_length_px) * pixel_size_m * 1_000_000.0
+    if length_um <= 0:
+        return None
+
+    if length_um >= 1.0:
+        unit = "µm"
+        unit_value = length_um
+    else:
+        unit = "nm"
+        unit_value = length_um * 1000.0
+
+    exponent = math.floor(math.log10(unit_value))
+    candidates = []
+    for power in range(exponent - 1, exponent + 2):
+        for base in (1.0, 2.0, 5.0):
+            candidates.append(base * (10.0**power))
+    best = min(candidates, key=lambda item: abs(math.log(item / unit_value)))
+    relative_error = abs(best - unit_value) / unit_value
+    if relative_error > 0.30:
+        return format_scale_label(unit_value, unit)
+    return format_scale_label(best, unit)
 
 
 def smooth(values: np.ndarray, window: int) -> np.ndarray:
@@ -192,29 +296,61 @@ def text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -
     return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
+def fit_font_to_bar_length(
+    draw: ImageDraw.ImageDraw,
+    label: str,
+    bar_len: int,
+    explicit_font_size: int | None,
+) -> tuple[ImageFont.ImageFont, int, int, int]:
+    if explicit_font_size is not None:
+        size = max(6, min(explicit_font_size, 96))
+        font = load_font(size)
+        label_w, label_h = text_size(draw, label, font)
+        return font, size, label_w, label_h
+
+    best: tuple[int, ImageFont.ImageFont, int, int, int] | None = None
+    for size in range(6, 97):
+        font = load_font(size)
+        label_w, label_h = text_size(draw, label, font)
+        difference = abs(label_w - bar_len)
+        if best is None or difference < best[0] or (
+            difference == best[0] and label_w <= bar_len < best[3]
+        ):
+            best = (difference, font, size, label_w, label_h)
+
+    if best is None:
+        font = load_font(12)
+        label_w, label_h = text_size(draw, label, font)
+        return font, 12, label_w, label_h
+
+    _, font, size, label_w, label_h = best
+    return font, size, label_w, label_h
+
+
 def draw_scale_bar(
     image: Image.Image,
     label: str,
     bar_length_px: int | None,
     font_size: int | None,
     position: str,
-) -> Image.Image:
+) -> tuple[Image.Image, dict[str, int]]:
     output = image.copy().convert("RGB")
     width, height = output.size
     draw = ImageDraw.Draw(output)
 
-    size = font_size or int(round(width * 0.065))
-    size = max(24, min(size, 96))
-    font = load_font(size)
-
-    detected_len = bar_length_px or int(round(width * 0.16))
-    bar_len = max(int(width * 0.08), min(int(detected_len), int(width * 0.38)))
     bar_thickness = max(4, int(round(width * 0.010)))
     margin_x = max(12, int(round(width * 0.030)))
     margin_y = max(12, int(round(height * 0.045)))
     gap = max(5, int(round(height * 0.018)))
 
-    label_w, label_h = text_size(draw, label, font)
+    if bar_length_px is None:
+        raise ValueError("No source scale-bar length was detected. Provide --bar-length-px.")
+    bar_len = max(1, int(round(bar_length_px)))
+    max_bar_len = max(1, width - (2 * margin_x))
+    if bar_len > max_bar_len:
+        bar_len = max_bar_len
+
+    font, size, label_w, label_h = fit_font_to_bar_length(draw, label, bar_len, font_size)
 
     if position == "lower-right":
         bar_x0 = width - margin_x - bar_len
@@ -226,7 +362,7 @@ def draw_scale_bar(
     bar_y0 = height - margin_y - bar_thickness
     label_y = max(0, bar_y0 - gap - label_h)
     bar_y1 = bar_y0 + bar_thickness
-    bar_x1 = bar_x0 + bar_len
+    bar_x1 = bar_x0 + bar_len - 1
 
     shadow = max(1, bar_thickness // 3)
     shadow_color = (0, 0, 0)
@@ -239,7 +375,12 @@ def draw_scale_bar(
         fill=shadow_color,
     )
     draw.rectangle([bar_x0, bar_y0, bar_x1, bar_y1], fill=white)
-    return output
+    return output, {
+        "drawn_bar_px": bar_len,
+        "font_size_px": size,
+        "label_width_px": label_w,
+        "label_height_px": label_h,
+    }
 
 
 def unique_output_path(out_dir: Path, stem: str, suffix: str, ext: str) -> Path:
@@ -255,16 +396,24 @@ def unique_output_path(out_dir: Path, stem: str, suffix: str, ext: str) -> Path:
 
 def process_one(path: Path, args: argparse.Namespace, out_dir: Path) -> dict[str, str | int]:
     with Image.open(path) as image:
-        gray = to_uint8_gray(image)
-        scale_x, scale_y, detected_bar_len = detect_source_scale_bar(gray)
-        crop_top_y = detect_footer_top(gray, args.crop_bottom_ratio, args.crop_bottom_px)
         rgb = to_rgb(image)
+        gray = to_uint8_gray(image)
+        scale_x, scale_y, detected_bar_len = detect_source_scale_bar(gray, rgb)
+        pixel_size_m = extract_pixel_size_m(image)
+        inferred_label = infer_scale_label(detected_bar_len, pixel_size_m)
+        crop_top_y = detect_footer_top(gray, args.crop_bottom_ratio, args.crop_bottom_px)
         cropped = rgb.crop((0, 0, rgb.size[0], crop_top_y))
 
     bar_len = args.bar_length_px or detected_bar_len
-    processed = draw_scale_bar(
+    scale_label = args.scale_label or inferred_label
+    if bar_len is None:
+        raise ValueError("Could not detect the original scale-bar length; provide --bar-length-px.")
+    if not scale_label:
+        raise ValueError("Could not infer the original scale label; provide --scale-label.")
+
+    processed, scale_metrics = draw_scale_bar(
         cropped,
-        label=args.scale_label,
+        label=scale_label,
         bar_length_px=bar_len,
         font_size=args.font_size,
         position=args.position,
@@ -287,7 +436,13 @@ def process_one(path: Path, args: argparse.Namespace, out_dir: Path) -> dict[str
         "detected_source_scale_x": "" if scale_x is None else scale_x,
         "detected_source_scale_y": "" if scale_y is None else scale_y,
         "scale_bar_px": "" if bar_len is None else int(bar_len),
-        "scale_label": args.scale_label,
+        "scale_label": scale_label,
+        "source_pixel_size_m": "" if pixel_size_m is None else f"{pixel_size_m:.9g}",
+        "inferred_scale_label": "" if inferred_label is None else inferred_label,
+        "drawn_bar_px": scale_metrics["drawn_bar_px"],
+        "font_size_px": scale_metrics["font_size_px"],
+        "label_width_px": scale_metrics["label_width_px"],
+        "label_height_px": scale_metrics["label_height_px"],
     }
 
 
@@ -326,7 +481,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("inputs", nargs="+", help="SEM image files or folders.")
     parser.add_argument("--output-dir", help="Folder for processed images.")
     parser.add_argument("--recursive", action="store_true", help="Process subfolders.")
-    parser.add_argument("--scale-label", default="1\u03bcm", help="Scale label text.")
+    parser.add_argument(
+        "--scale-label",
+        help="Scale label text. If omitted, infer it from the source scale bar and metadata.",
+    )
     parser.add_argument("--crop-bottom-px", type=int, help="Exact bottom pixels to crop.")
     parser.add_argument("--crop-bottom-ratio", type=float, help="Bottom ratio to crop.")
     parser.add_argument("--bar-length-px", type=int, help="Redrawn scale-bar length in pixels.")
@@ -383,6 +541,12 @@ def main(argv: list[str] | None = None) -> int:
         "detected_source_scale_y",
         "scale_bar_px",
         "scale_label",
+        "source_pixel_size_m",
+        "inferred_scale_label",
+        "drawn_bar_px",
+        "font_size_px",
+        "label_width_px",
+        "label_height_px",
         "error",
     ]
     with summary_path.open("w", newline="", encoding="utf-8-sig") as handle:

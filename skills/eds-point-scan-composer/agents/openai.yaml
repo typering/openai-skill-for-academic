@@ -1,0 +1,8 @@
+interface:
+  display_name: "EDS Point-Scan Composer"
+  short_description: "Compose EDS C% point-scan group figures with statistics and coating conclusions."
+  default_prompt: "Use $eds-point-scan-composer to organize these EDS point-scan C percentage plots into a publication-style group figure and write a conclusion about carbon attachment/coating effect."
+
+policy:
+  allow_implicit_invocation: true
+
