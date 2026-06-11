@@ -84,19 +84,24 @@ if ($LASTEXITCODE -ne 0) {
 
 $ref = Invoke-GhJson -Arguments @("$ApiRoot/git/ref/heads/$Branch")
 $baseCommitSha = $ref.object.sha
-$baseCommit = Invoke-GhJson -Arguments @("$ApiRoot/git/commits/$baseCommitSha")
-$baseTreeSha = $baseCommit.tree.sha
 
-$files = Get-ChildItem -LiteralPath $RepoPath -File -Recurse -Force | Where-Object {
-    $_.FullName -notlike (Join-Path $RepoPath ".git") + "\*"
+$trackedFiles = & git -C $RepoPath ls-files
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to list tracked files from git."
 }
 
-$rootUri = New-Object System.Uri($RepoPath.TrimEnd("\") + "\")
 $treeEntries = @()
-foreach ($file in $files) {
-    $fileUri = New-Object System.Uri($file.FullName)
-    $relativePath = [System.Uri]::UnescapeDataString($rootUri.MakeRelativeUri($fileUri).ToString())
-    $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+foreach ($relativePath in $trackedFiles) {
+    if (-not $relativePath) {
+        continue
+    }
+
+    $filePath = Join-Path $RepoPath ($relativePath -replace "/", "\")
+    if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+        throw "Tracked file is missing locally: $relativePath"
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($filePath)
     $blob = Invoke-GhJson -Arguments @("--method", "POST", "$ApiRoot/git/blobs") -Body @{
         content = [Convert]::ToBase64String($bytes)
         encoding = "base64"
@@ -111,7 +116,6 @@ foreach ($file in $files) {
 }
 
 $tree = Invoke-GhJson -Arguments @("--method", "POST", "$ApiRoot/git/trees") -Body @{
-    base_tree = $baseTreeSha
     tree = $treeEntries
 }
 
@@ -126,5 +130,5 @@ Invoke-GhJson -Arguments @("--method", "PATCH", "$ApiRoot/git/refs/heads/$Branch
     force = $false
 } | Out-Null
 
-Write-Host "Synced $($files.Count) files to https://github.com/$Owner/$RepositoryName/tree/$Branch"
+Write-Host "Synced $($treeEntries.Count) tracked files to https://github.com/$Owner/$RepositoryName/tree/$Branch"
 Write-Host "Commit: https://github.com/$Owner/$RepositoryName/commit/$($commit.sha)"
