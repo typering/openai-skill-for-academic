@@ -54,6 +54,7 @@ Include:
 - Use a clean white background and compact multi-panel layout.
 - Preserve the plotted axes, point labels, and values.
 - For EDS point-scan C% values grouped by sample position, default to boxplots: one sample per independent figure and one boxplot per measured position, with the five raw points overlaid.
+- For small EDS point-scan groups, draw boxplot whiskers to the observed minimum and maximum values (Matplotlib `whis=(0, 100)`) so all measured points remain inside the plotted range rather than being visually separated as default 1.5 IQR outliers.
 - Label each raw point with its C% value using a small, unobtrusive plain-text label with no box or border. For each boxplot, arrange the five labels in a neat single-side vertical column sorted from top to bottom by plotted value; keep labels readable but smaller than axis tick text and avoid covering the box, median line, or neighboring points.
 - Use bold Arial panel labels `a`, `b`, `c`... placed immediately adjacent to the top-left of each panel.
 - Do not add an in-figure statistics table unless the user explicitly asks for it.

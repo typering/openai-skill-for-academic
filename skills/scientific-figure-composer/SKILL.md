@@ -60,6 +60,7 @@ Before starting a figure task, read `references/user-preferences.md` if it exist
 3. **Figure layout rules**
    - Use a clean white background, compact spacing, and large panels.
    - Follow Nature-like multi-panel conventions: panel labels `a`, `b`, `c`... in bold Arial, placed close to the top-left of each panel.
+   - For SEM two-row example layouts, place larger readable panel labels in a narrow white margin to the left of each image rather than above the image, with a tight but visible horizontal gap. Keep labels fully outside the image area, keep image-to-image spacing unchanged when adjusting label size, and put experimental parameters in captions or CSV files.
    - Do not leave large whitespace between related panels; align rows/columns consistently.
    - Do not print descriptive paragraph text in the figure unless the user explicitly asks. Put descriptions in caption/analysis files.
    - Tables inside figures should be labeled `table`, not a letter, unless the user explicitly wants lettered tables.

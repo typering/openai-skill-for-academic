@@ -9,6 +9,8 @@ description: Automatically use this skill whenever the user asks Codex to plot, 
 
 Use this skill to turn Raman `.txt` data into consistent publication-style figures. The expected input is a two-column text file: Raman shift in the first column and intensity in the second column.
 
+For noisy spectra with sharp miscellaneous spikes or cluttered minor peaks, use the script's fitted trace mode. It performs robust spike replacement, baseline fitting, and Savitzky-Golay smoothing so the plotted spectrum is visually smooth while retaining broad Raman bands.
+
 This skill is the standing workflow for this user's Raman plotting tasks. If the user asks to draw Raman figures from data, process Raman spectra, make Raman images, or "use the same Raman plotting requirements", apply this skill without asking for confirmation unless an input file or x-axis range is ambiguous.
 
 ## Standing Prompt
@@ -31,7 +33,9 @@ Before plotting, load and follow the reusable Chinese prompt in `references/defa
   - Purple/origin samples: `#8A00CC`.
   - Preferred line width: `2.15`.
 - Draw vertical black dotted guide lines for peaks.
-- Label peak positions above the guide line in bold black text.
+- Label peak positions above the guide line in bold black text, with all peak labels aligned at the same vertical height.
+- When the user asks for specific feature labels, add manual peak markers with `--feature-peak position:label`, for example `--feature-peak 796:SiC-TO`.
+- When the user asks for no legend/图注, pass `--no-legend`.
 - Label carbon peaks specially:
   - D band: `C-D`, detected in the 1280-1450 cm^-1 window.
   - G band: `C-G`, detected in the 1500-min(1650, x_max) cm^-1 window.
@@ -43,8 +47,8 @@ Before plotting, load and follow the reusable Chinese prompt in `references/defa
 3. Restrict the plotted x-axis to the requested range:
    - If unspecified, use the user's most recent Raman preference.
    - Common ranges from this project: `0-1600` and `100-2000`.
-4. Detect peaks using a smoothed, baseline-corrected trace, but plot the original intensity trace.
-5. Always include C-D and C-G annotations when their windows fall inside the x-axis range.
+4. Detect peaks using a smoothed, baseline-corrected trace. If the spectrum contains cluttered杂峰 or the user asks for smoothing/fitting, plot the fitted trace instead of the original trace.
+5. Always include C-D and C-G annotations when their windows fall inside the x-axis range unless the user requests manual-only markers.
 6. Save each spectrum as both `.png` and `.svg`.
 7. Save `peak_positions.csv` with columns:
    - `sample`
@@ -73,6 +77,14 @@ Useful options:
 - `--x-min` and `--x-max`: set the displayed Raman shift range.
 - `--out-dir`: output folder.
 - `--line-width`: curve width; default is `2.15`.
+- `--trace-mode fitted`: plot a despiked, baseline-preserving fitted/smoothed trace. This is now the default.
+- `--trace-mode original`: plot the raw trace when the user explicitly wants unprocessed intensity.
+- `--feature-peak 796:SiC-TO`: add a manual labeled feature marker. Repeat for multiple markers.
+- `--no-auto-peaks`: only show manually supplied feature markers.
+- `--carbon-only`: keep automatic C-D/C-G detection but suppress miscellaneous auto peak labels.
+- `--color #0047B3`: force a single curve color.
+- `--no-legend`: hide the figure legend/图注.
+- `--output-stem`: set the output filename stem when plotting one file.
 - `--no-contact-sheet`: skip summary preview generation.
 
 ## Project-Specific Preferences
@@ -81,6 +93,7 @@ When working on this user's Raman data, default to:
 
 - Separate figure for each `.txt` data file.
 - Darkened, thick curve colors.
-- Axis range `0-1600 cm^-1` if the user says "same as before" after the latest adjustment.
-- Peak annotations within the visible x-axis range only.
+- Axis range `200-1900 cm^-1` if the user says "same as before" after the latest adjustment.
+- For this SiC carbon-coating project, annotate only carbon D/G peaks unless the user explicitly requests SiC or other feature peaks.
+- Peak annotations within the visible x-axis range only, aligned at the same vertical height.
 - PNG and SVG outputs, plus `peak_positions.csv` and `contact_sheet.png`.

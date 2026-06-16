@@ -7,6 +7,8 @@ This file stores reusable preferences learned from the user's EDS point-scan fig
 - EDS point-scan group figures should not include an in-figure statistics table unless explicitly requested.
 - For EDS point-scan C% values from Word/table data, automatically use boxplots by default: one sample per independent figure, one measured position per boxplot, and the five raw EDS points overlaid.
 - Add small numeric C% labels next to every raw point in boxplots; for each boxplot, arrange labels in one neat side column ordered from top to bottom by plotted value. Labels should be plain text with no box or border, visible but unobtrusive, and should not dominate the figure.
+- For future EDS boxplots, keep these raw-point numeric labels by default, arranged as a single-side vertical column for each boxplot, unless the user explicitly asks to omit point labels.
+- For EDS point-scan boxplots with small raw-point groups, draw whiskers to the observed minimum and maximum values (`whis=(0, 100)` in Matplotlib) so all measured EDS points are represented within the boxplot range instead of being visually separated as statistical outliers by the default 1.5 IQR rule.
 - Put summary statistics and conclusions in `FigN_caption.txt` or `FigN_analysis.txt`.
 - Use compact publication-style white-background layouts.
 - Panel labels should be bold Arial letters placed immediately adjacent to the top-left of each panel, with no visible gap.
